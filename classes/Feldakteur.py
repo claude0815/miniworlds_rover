@@ -78,30 +78,81 @@ def warte(schritte: int = 1):
     """Wie Greenfoot.delay(schritte): Die Welt wird neu gezeichnet, dann wartet das Programm.
 
     So sieht man z. B. den Rover in einer while-Schleife Feld für Feld fahren.
-    Solange die Welt noch nicht läuft (z. B. beim Aufbau in on_setup), passiert nichts.
+
+    Manchmal kann Python nicht warten: beim Aufbau der Welt, bei einem
+    Methodenaufruf per Rechtsklick im Editor und in Browsern ohne JSPI. Dann
+    läuft das Programm ohne Pause weiter. Hört es nach GRENZE_OHNE_PAUSE Sekunden
+    immer noch nicht auf (Endlosschleife), bricht warte() mit einer Fehlermeldung
+    ab, statt das Programm hängen zu lassen.
     """
     welt = miniworlds.App.get_running_world()
-    if welt is None or welt.frame == 0:
-        return
-    welt.refresh()
-    _schlafe(schritte * verzoegerung() * BASIS_FPS / max(1, welt.fps))
+    sekunden = schritte * verzoegerung() * BASIS_FPS / max(1, getattr(welt, "fps", BASIS_FPS))
+    if welt is not None and welt.frame > 0 and _kann_pausieren():
+        _ohne_pause["zuletzt"] = 0.0
+        welt.refresh()
+        if sys.platform == "emscripten":
+            _pausiere_im_browser(sekunden)
+        else:
+            _pausiere_am_desktop(sekunden)
+    else:
+        _pruefe_endlosschleife()
 
 
-def _schlafe(sekunden: float):
-    if sekunden <= 0:
-        return
-    if sys.platform == "emscripten":
-        # Im Browser (Pyodide) darf das Programm nicht einfach blockieren:
-        # Python wird angehalten, bis die Zeit um ist; dabei zeichnet der Browser.
-        # Geht das nicht (Browser ohne JSPI), läuft das Programm ohne Pause weiter.
+#: So lange darf ein Programm ohne Pause in warte() kreisen, bevor es abgebrochen wird.
+GRENZE_OHNE_PAUSE = 3.0
+_ohne_pause = {"beginn": 0.0, "zuletzt": 0.0}
+
+
+class Endlosschleife(RuntimeError):
+    """Das Programm ruft warte() immer wieder auf, ohne fertig zu werden."""
+
+
+def _pruefe_endlosschleife():
+    jetzt = time.perf_counter()
+    if jetzt - _ohne_pause["zuletzt"] > 0.25:  # neuer Aufruf: Zeitmessung beginnt von vorn
+        _ohne_pause["beginn"] = jetzt
+    _ohne_pause["zuletzt"] = jetzt
+    if jetzt - _ohne_pause["beginn"] > GRENZE_OHNE_PAUSE:
+        _ohne_pause["zuletzt"] = 0.0
+        raise Endlosschleife(
+            "Abgebrochen: Das Programm hört nicht auf (Endlosschleife?). "
+            "Bei act() des Rovers heißt das meist: Vor dem Rover liegt in Fahrtrichtung kein Hügel, "
+            "er steht am Rand und meldet immer wieder \"Ich kann mich nicht bewegen\". "
+            "Tipp: act() mit \"Schritt\" oder \"Start\" ausführen – dann sieht man den Rover fahren."
+        )
+
+
+def _kann_pausieren() -> bool:
+    if sys.platform != "emscripten":
+        return True
+    try:
+        from pyodide.ffi import can_run_sync
+
+        return bool(can_run_sync())
+    except Exception:
+        return False
+
+
+def _pausiere_im_browser(sekunden: float):
+    # Python wird angehalten (JSPI), der Browser zeichnet die Welt und der Editor
+    # kann weiter Befehle schicken. In kurzen Stücken warten, damit "Stopp" sofort wirkt.
+    from pyodide.ffi import run_sync
+
+    ende = time.perf_counter() + sekunden
+    while True:
+        rest = ende - time.perf_counter()
+        run_sync(asyncio.sleep(max(0.0, min(rest, 0.1))))
         try:
-            from pyodide.ffi import can_run_sync, run_sync
+            aufgabe = asyncio.current_task()
+        except RuntimeError:
+            aufgabe = None
+        if aufgabe is not None and aufgabe.cancelling():  # Stopp wurde gedrückt
+            raise asyncio.CancelledError()
+        if rest <= 0.1:
+            return
 
-            if can_run_sync():
-                run_sync(asyncio.sleep(sekunden))
-        except Exception:
-            pass
-        return
+
+def _pausiere_am_desktop(sekunden: float):
     import pygame
 
     ende = time.perf_counter() + sekunden

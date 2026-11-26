@@ -25,6 +25,9 @@ def _planet():
 @pytest.fixture
 def planet(_planet):
     """Ein leerer Planet (ohne Fenster-Hauptschleife)."""
+    from classes import Feldakteur
+
+    Feldakteur._ohne_pause["zuletzt"] = 0.0  # Endlosschleifen-Messung beginnt neu
     yield _planet
     for akteur in list(_planet.actors):
         akteur.remove()

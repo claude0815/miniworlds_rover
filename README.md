@@ -85,10 +85,18 @@ und jeder Rover erzeugt seine eigene Anzeige auf Feld (7, 0).
   normale Pixelwelt. Rover, Gestein, Hügel und Marke erben von `Feldakteur` und
   rasten immer in der Mitte eines 50-px-Feldes ein, auch beim Ziehen mit der Maus.
 * **`Greenfoot.delay` im Browser:** `warte()` zeichnet die Welt und wartet. Am
-  Desktop sieht man den Rover so Feld für Feld fahren. Im Browser braucht das
-  Warten JSPI (z. B. aktuelles Chrome/Edge). Ohne JSPI läuft `act()` ohne Pause
-  durch und der Rover steht sofort am Ziel. Im Browser-Editor selbst ist das noch
-  nicht getestet; geprüft ist die Schnittstelle, die der Editor aufruft (siehe Tests).
+  Desktop sieht man den Rover so Feld für Feld fahren. Im Editor geht das nur,
+  wenn `act()` über **Schritt** bzw. **Start** läuft und der Browser JSPI kann
+  (z. B. aktuelles Chrome/Edge). Per **Rechtsklick** aufgerufene Methoden laufen im
+  Editor ohne Pause durch; der Rover steht dann sofort am Ziel.
+* **Endlosschleifen:** Liegt vor dem Rover in Fahrtrichtung kein Hügel, endet die
+  `while`-Schleife in `act()` nie (auch in Greenfoot nicht). Wo Python nicht
+  warten kann, bricht `warte()` nach 3 Sekunden mit der Meldung „Abgebrochen: Das
+  Programm hört nicht auf (Endlosschleife?) …“ ab. Sonst würde der Editor das
+  Programm hart beenden.
+* Im Browser-Editor selbst ist das noch nicht getestet; geprüft ist die
+  Schnittstelle, die der Editor aufruft, und das Verhalten mit nachgestelltem
+  Pyodide (siehe Tests).
 * Ein im Editor in Zeile 0 gesetzter Rover bleibt dort. In Greenfoot rückt
   `addedToWorld` ihn in Zeile 1. Im Code erzeugte Rover werden verschoben.
 * Der Code-Export des Editors listet auch die Anzeige-Objekte (`Display`). Diese
